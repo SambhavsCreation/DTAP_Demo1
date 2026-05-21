@@ -9,6 +9,10 @@ from .models import PlantReading, AppMode
 from .services import PlantAnalysisError, PlantTtsError, analyze_reading_with_llm, synthesize_speech_mp3
 
 
+SOIL_LEVEL_MIN = 0
+SOIL_LEVEL_MAX = 4095
+
+
 def _serialize_reading(reading):
     return {
         'id': reading.id,
@@ -38,8 +42,8 @@ def _validate_payload(payload):
     except (TypeError, ValueError):
         return None, 'soilLevel and ambientLightLevel must be integers. humidityLevels and temperatureLevels must be numbers.'
 
-    if not 0 <= soil_level <= 100:
-        return None, 'soilLevel must be between 0 and 100.'
+    if not SOIL_LEVEL_MIN <= soil_level <= SOIL_LEVEL_MAX:
+        return None, f'soilLevel must be between {SOIL_LEVEL_MIN} and {SOIL_LEVEL_MAX}.'
 
     if ambient_light_level < 0:
         return None, 'ambientLightLevel must be zero or greater.'

@@ -13,7 +13,7 @@ class PlantReading(models.Model):
     ]
 
     soil_level = models.PositiveSmallIntegerField(
-        validators=[MinValueValidator(0), MaxValueValidator(100)]
+        validators=[MinValueValidator(0), MaxValueValidator(4095)]
     )
     ambient_light_level = models.PositiveIntegerField()
     humidity_levels = models.FloatField(default=0.0)
@@ -28,7 +28,7 @@ class PlantReading(models.Model):
 
     def __str__(self):
         condition = self.condition or 'unclassified'
-        return f'{self.soil_level}% soil, {self.ambient_light_level} lux, {condition}'
+        return f'soil={self.soil_level}, light={self.ambient_light_level} lux, {condition}'
 
 
 class AppMode(models.Model):

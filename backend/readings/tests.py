@@ -109,7 +109,7 @@ class PlantReadingApiTests(TestCase):
             reverse('readings_collection'),
             data=json.dumps(
                 {
-                    'soilLevel': 120,
+                    'soilLevel': 5000,
                     'ambientLightLevel': 520,
                     'humidityLevels': 40.5,
                     'temperatureLevels': 22.0,
@@ -120,6 +120,37 @@ class PlantReadingApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
+
+    @patch('readings.views.analyze_reading_with_llm')
+    def test_post_reading_accepts_raw_esp32_soil_value(self, analyze_mock):
+        analyze_mock.return_value = {
+            'condition': 'neutral',
+            'messages': [
+                'I am holding steady.',
+                'My roots are okay.',
+                'Light is manageable.',
+                'A bit more care helps.',
+                'I am not doing too bad.',
+            ],
+        }
+
+        response = self.client.post(
+            reverse('readings_collection'),
+            data=json.dumps(
+                {
+                    'soilLevel': 3120,
+                    'ambientLightLevel': 520,
+                    'humidityLevels': 40.5,
+                    'temperatureLevels': 22.0,
+                    'deviceId': 'esp32-test-device',
+                }
+            ),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(PlantReading.objects.count(), 1)
+        self.assertEqual(PlantReading.objects.first().soil_level, 3120)
 
     @patch('readings.views.random.choice', return_value='I need a little more water.')
     def test_plant_status_returns_condition_and_message(self, _choice_mock):
