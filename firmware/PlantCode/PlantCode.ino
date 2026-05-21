@@ -14,8 +14,7 @@
 #define I2S_DOUT 4
 #define TRIG_PIN 18
 #define ECHO_PIN 5
-// Use an ADC-capable pin for soil moisture reads on ESP32.
-#define SOIL_PIN 34
+#define SOIL_PIN 19
 #define SDA_PIN 21
 #define SCL_PIN 22
 
@@ -29,9 +28,6 @@ String deviceId = "POT-12345";
 
 #define WIFI_TIMEOUT_MS   10000   // 10 s to establish connection
 #define WIFI_RECOVER_MS   30000   // wait 30 s before retrying after failure
-#define POST_INTERVAL_MS  5000    // 5 s between uploads
-#define VOICE_COOLDOWN_MS 15000   // 15 s between voice trigger attempts
-#define AUDIO_SESSION_TIMEOUT_MS 45000
 
 // ---------------- SENSORS ----------------
 Adafruit_BME280 bme;
@@ -43,8 +39,6 @@ bool audioPlaying = false;
 
 // ---------------- TIMING ----------------
 unsigned long startTimeForRequest = 0;
-unsigned long lastVoiceTriggerAt = 0;
-unsigned long audioStartedAt = 0;
 
 // ---------------- WIFI RECONNECT ----------------
 void ensureWiFi() {
@@ -72,7 +66,7 @@ void ensureWiFi() {
 struct SensorData {
     float temperature;
     float humidity;
-    int   soilPercent;
+    int   soilRaw;
     float lightLux;
 };
 
@@ -84,7 +78,7 @@ void postTask(void* param) {
     SensorData* data = (SensorData*)param;
 
     String json = "{";
-    json += "\"soilLevel\":"          + String(data->soilPercent)  + ",";
+    json += "\"soilLevel\":"          + String(data->soilRaw)      + ",";
     json += "\"ambientLightLevel\":"  + String(data->lightLux)     + ",";
     json += "\"humidityLevels\":"     + String(data->humidity)     + ",";
     json += "\"temperatureLevels\":"  + String(data->temperature)  + ",";
@@ -95,16 +89,12 @@ void postTask(void* param) {
     WiFiClientSecure client;
     client.setInsecure();
     HTTPClient http;
-    http.begin(client, readingsUrl.c_str());
-    http.setConnectTimeout(8000);
+    http.setConnectTimeout(10000);
     http.setTimeout(15000);
+    http.begin(client, readingsUrl.c_str());
     http.addHeader("Content-Type", "application/json");
     int code = http.POST(json);
-    if (code > 0) {
-        Serial.println("POST /readings status: " + String(code));
-    } else {
-        Serial.println("POST /readings failed: " + http.errorToString(code));
-    }
+    Serial.println("HTTP: " + String(code));
     http.end();
 
     delete data;        
@@ -119,7 +109,6 @@ void audio_info(const char* info){
 void audio_eof_stream(const char *info){
     Serial.println("Audio finished");
     audioPlaying = false;
-    audioStartedAt = 0;
 }
 
 // ---------------- ULTRASONIC ----------------
@@ -161,14 +150,8 @@ void setup(){
 // ---------------- LOOP ----------------
 void loop(){
     // ----------- SEND SENSOR DATA -----------
-    if (audioPlaying && millis() - audioStartedAt > AUDIO_SESSION_TIMEOUT_MS) {
-        Serial.println("Audio session timeout - resetting audio state");
-        audio.stopSong();
-        audioPlaying = false;
-        audioStartedAt = 0;
-    }
-
-    if (millis() - startTimeForRequest > POST_INTERVAL_MS && !postInProgress && !audioPlaying) {
+    
+    if (millis() - startTimeForRequest > 5000 && !postInProgress && !audioPlaying) {
 
         ensureWiFi();
 
@@ -176,8 +159,7 @@ void loop(){
         SensorData* data = new SensorData();
         data->temperature = bme.readTemperature();
         data->humidity    = bme.readHumidity();
-        int rawSoil       = constrain(analogRead(SOIL_PIN), 0, 4095);
-        data->soilPercent = map(rawSoil, 0, 4095, 0, 100);
+        data->soilRaw     = analogRead(SOIL_PIN);
         data->lightLux    = lightMeter.readLightLevel();
 
         postInProgress = true;
@@ -203,22 +185,12 @@ void loop(){
 
     // ----------- DISTANCE TRIGGER AUDIO -----------
     float distance = getDistance();
-    bool voiceCooldownElapsed = (millis() - lastVoiceTriggerAt) >= VOICE_COOLDOWN_MS;
-    if (distance > 0 && distance <= 100 && !audioPlaying && voiceCooldownElapsed) {
+    if (distance > 0 && distance <= 100 && !audioPlaying) {
         Serial.println(distance);
         ensureWiFi();
         Serial.println("Object detected!");
-        String scopedVoiceUrl = voiceUrl + "?deviceId=" + deviceId;
-        bool started = audio.connecttohost(scopedVoiceUrl.c_str());
-        if (started) {
-            audioPlaying = true;
-            audioStartedAt = millis();
-            lastVoiceTriggerAt = millis();
-        } else {
-            Serial.println("Audio start failed");
-            audioPlaying = false;
-            audioStartedAt = 0;
-        }
+        audio.connecttohost(voiceUrl.c_str());
+        audioPlaying = true;
     }
 
     audio.loop();
