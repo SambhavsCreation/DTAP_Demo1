@@ -6,7 +6,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .models import PlantReading, AppMode
-from .services import PlantAnalysisError, analyze_reading_with_llm, synthesize_speech_mp3
+from .services import PlantAnalysisError, PlantTtsError, analyze_reading_with_llm, synthesize_speech_mp3
 
 
 def _serialize_reading(reading):
@@ -51,6 +51,11 @@ def _validate_payload(payload):
         'temperature_levels': temperature_levels,
         'device_id': device_id,
     }, None
+
+
+def _sanitize_header_value(value, max_len=256):
+    text = str(value or '').replace('\r', ' ').replace('\n', ' ').strip()
+    return text[:max_len]
 
 
 @csrf_exempt
@@ -162,11 +167,11 @@ def plant_voice(request):
 
     try:
         audio_bytes = synthesize_speech_mp3(selected_message)
-    except Exception as error:
+    except PlantTtsError as error:
         return JsonResponse({'error': f'TTS generation failed: {error}'}, status=502)
 
     response = HttpResponse(audio_bytes, content_type='audio/mpeg')
     response['Content-Disposition'] = 'inline; filename="plant-voice.mp3"'
-    response['X-Plant-Condition'] = reading.condition
-    response['X-Plant-Message'] = selected_message
+    response['X-Plant-Condition'] = _sanitize_header_value(reading.condition, max_len=32)
+    response['X-Plant-Message'] = _sanitize_header_value(selected_message)
     return response

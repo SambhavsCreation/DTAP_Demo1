@@ -7,7 +7,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .models import PlantReading
-from .services import PlantAnalysisError, analyze_reading_with_llm, synthesize_speech_mp3
+from .services import PlantAnalysisError, PlantTtsError, analyze_reading_with_llm, synthesize_speech_mp3
 
 
 class _FakeUrlopenResponse:
@@ -167,6 +167,26 @@ class PlantReadingApiTests(TestCase):
         self.assertEqual(response['X-Plant-Message'], 'I feel great today.')
         self.assertEqual(response.content, b'MP3DATA')
 
+    @patch('readings.views.synthesize_speech_mp3', return_value=b'MP3DATA')
+    @patch('readings.views.random.choice', return_value='Line 1\r\nLine 2')
+    def test_plant_voice_sanitizes_message_header(self, _choice_mock, _tts_mock):
+        PlantReading.objects.create(
+            soil_level=71,
+            ambient_light_level=530,
+            condition='good',
+            plant_messages=[
+                'Line 1\r\nLine 2',
+                'That light is perfect.',
+                'My roots are happy.',
+                'I am feeling strong.',
+                'Keep this up.',
+            ],
+        )
+
+        response = self.client.get(reverse('plant_voice'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['X-Plant-Message'], 'Line 1  Line 2')
+
 
 class PlantAnalysisTlsTests(TestCase):
     @override_settings(GOOGLE_API_KEY='')
@@ -253,3 +273,24 @@ class PlantAnalysisTlsTests(TestCase):
             analyze_reading_with_llm(soil_level=50, ambient_light_level=400, humidity_levels=40.0, temperature_levels=22.0, device_id='test')
 
         self.assertIn('TLS certificate verification failed', str(error_context.exception))
+
+    @override_settings(GOOGLE_API_KEY='test-google-key')
+    @patch('readings.services._synthesize_with_google_tts', side_effect=PlantTtsError('google failed'))
+    @patch('readings.services._synthesize_with_gtts', return_value=b'FALLBACK')
+    def test_synthesize_speech_falls_back_to_gtts_on_google_failure(
+        self, gtts_mock, _google_mock
+    ):
+        audio = synthesize_speech_mp3('Hello plant')
+        self.assertEqual(audio, b'FALLBACK')
+        gtts_mock.assert_called_once_with('Hello plant')
+
+    @override_settings(GOOGLE_API_KEY='test-google-key')
+    @patch('readings.services._synthesize_with_google_tts', side_effect=PlantTtsError('google failed'))
+    @patch('readings.services._synthesize_with_gtts', side_effect=PlantTtsError('gtts failed'))
+    def test_synthesize_speech_raises_if_google_and_fallback_fail(
+        self, _gtts_mock, _google_mock
+    ):
+        with self.assertRaises(PlantTtsError) as error_context:
+            synthesize_speech_mp3('Hello plant')
+
+        self.assertIn('Google TTS failed', str(error_context.exception))

@@ -1,4 +1,5 @@
 import base64
+import binascii
 import io
 import json
 import ssl
@@ -11,6 +12,10 @@ from gtts import gTTS
 
 
 class PlantAnalysisError(Exception):
+    pass
+
+
+class PlantTtsError(Exception):
     pass
 
 
@@ -165,41 +170,69 @@ Return only valid JSON in this exact shape:
     }
 
 
-def synthesize_speech_mp3(text):
-    if not hasattr(settings, 'GOOGLE_API_KEY') or not settings.GOOGLE_API_KEY:
-        audio_buffer = io.BytesIO()
+def _synthesize_with_gtts(text):
+    audio_buffer = io.BytesIO()
+    try:
         tts = gTTS(text=text, lang=settings.PLANT_TTS_LANGUAGE)
         tts.write_to_fp(audio_buffer)
         return audio_buffer.getvalue()
+    except Exception as error:
+        raise PlantTtsError(f'gTTS generation failed: {error}') from error
 
+
+def _synthesize_with_google_tts(text):
     voice = getattr(settings, 'GOOGLE_TTS_VOICE', 'en-US-Journey-F')
     language_code = '-'.join(voice.split('-')[:2]) if '-' in voice else 'en-US'
     url = f'https://texttospeech.googleapis.com/v1/text:synthesize?key={settings.GOOGLE_API_KEY}'
 
-    headers = {
-        'Content-Type': 'application/json',
-    }
-
-    data = {
-        'input': {'text': text},
-        'voice': {'languageCode': language_code, 'name': voice},
-        'audioConfig': {'audioEncoding': 'MP3'}
-    }
-
     request = urllib.request.Request(
         url,
-        data=json.dumps(data).encode('utf-8'),
-        headers=headers,
-        method='POST'
+        data=json.dumps(
+            {
+                'input': {'text': text},
+                'voice': {'languageCode': language_code, 'name': voice},
+                'audioConfig': {'audioEncoding': 'MP3'},
+            }
+        ).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+        method='POST',
     )
 
     try:
         ssl_context = _build_openrouter_ssl_context()
         with urllib.request.urlopen(request, timeout=30, context=ssl_context) as response:
             payload = json.loads(response.read().decode('utf-8'))
-            return base64.b64decode(payload['audioContent'])
     except urllib.error.HTTPError as error:
         details = error.read().decode('utf-8', errors='ignore')
-        raise Exception(f'Google TTS request failed: {error.code} {details}') from error
+        raise PlantTtsError(f'Google TTS request failed: {error.code} {details}') from error
     except urllib.error.URLError as error:
-        raise Exception(f'Google TTS request failed: {error.reason}') from error
+        raise PlantTtsError(f'Google TTS request failed: {error.reason}') from error
+    except OSError as error:
+        raise PlantTtsError(f'Google TTS SSL setup failed: {error}') from error
+    except json.JSONDecodeError as error:
+        raise PlantTtsError('Google TTS response was not valid JSON.') from error
+
+    try:
+        return base64.b64decode(payload['audioContent'])
+    except (KeyError, TypeError, binascii.Error) as error:
+        raise PlantTtsError('Google TTS response did not include valid audio data.') from error
+
+
+def synthesize_speech_mp3(text):
+    clean_text = str(text or '').strip()
+    if not clean_text:
+        raise PlantTtsError('TTS text is empty.')
+
+    if not settings.GOOGLE_API_KEY:
+        return _synthesize_with_gtts(clean_text)
+
+    try:
+        return _synthesize_with_google_tts(clean_text)
+    except PlantTtsError as google_error:
+        # Keep the endpoint resilient if Google TTS is rate-limited or temporarily unavailable.
+        try:
+            return _synthesize_with_gtts(clean_text)
+        except PlantTtsError as gtts_error:
+            raise PlantTtsError(
+                f'Google TTS failed: {google_error}. gTTS fallback failed: {gtts_error}.'
+            ) from gtts_error

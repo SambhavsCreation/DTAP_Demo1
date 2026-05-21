@@ -3,7 +3,7 @@ services:
     name: planty-patootie
     runtime: python
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
-    startCommand: python manage.py migrate --no-input && gunicorn plant_monitor.wsgi --worker-class gthread --threads 4 --workers 2 --timeout 120
+    startCommand: python manage.py migrate --no-input && gunicorn plant_monitor.wsgi --bind 0.0.0.0:$PORT --workers ${WEB_CONCURRENCY:-2} --worker-class gthread --threads ${GUNICORN_THREADS:-4} --timeout ${GUNICORN_TIMEOUT:-120} --graceful-timeout ${GUNICORN_GRACEFUL_TIMEOUT:-30} --keep-alive 5
     rootDir: backend
     envVars:
       - key: DATABASE_URL
