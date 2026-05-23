@@ -14,6 +14,14 @@ services:
         value: deepseek/deepseek-v4-flash
       - key: OPENROUTER_PROVIDER_SORT
         value: throughput
+      - key: OPENROUTER_ANALYSIS_WORKERS
+        value: "1"
+      - key: OPENROUTER_ANALYSIS_QUEUE_LIMIT
+        value: "16"
+      - key: WEB_CONCURRENCY
+        value: "1"
+      - key: GUNICORN_THREADS
+        value: "8"
       - key: PLANT_TTS_LANGUAGE
         value: en
       - key: DEBUG

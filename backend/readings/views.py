@@ -6,7 +6,12 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .models import PlantReading, AppMode
-from .services import PlantAnalysisError, PlantTtsError, analyze_reading_with_llm, synthesize_speech_mp3
+from .services import (
+    PlantTtsError,
+    enqueue_reading_analysis,
+    schedule_pending_analyses,
+    synthesize_speech_mp3,
+)
 
 
 SOIL_LEVEL_MIN = 0
@@ -21,6 +26,11 @@ def _serialize_reading(reading):
         'humidityLevels': reading.humidity_levels,
         'temperatureLevels': reading.temperature_levels,
         'deviceId': reading.device_id,
+        'analysisStatus': reading.analysis_status,
+        'analysisMode': reading.analysis_mode,
+        'analysisError': reading.analysis_error,
+        'analysisStartedAt': reading.analysis_started_at.isoformat() if reading.analysis_started_at else None,
+        'analysisCompletedAt': reading.analysis_completed_at.isoformat() if reading.analysis_completed_at else None,
         'condition': reading.condition,
         'plantMessages': reading.plant_messages,
         'recordedAt': reading.recorded_at.isoformat(),
@@ -88,10 +98,10 @@ def health_check(_request):
 
 
 def _get_latest_analyzed_reading(device_id=None):
-    qs = PlantReading.objects.exclude(condition__isnull=True).exclude(condition='')
+    qs = PlantReading.objects.filter(analysis_status=PlantReading.ANALYSIS_COMPLETED)
     if device_id:
         qs = qs.filter(device_id=device_id)
-        
+
     for reading in qs:
         if isinstance(reading.plant_messages, list) and reading.plant_messages:
             return reading
@@ -121,29 +131,25 @@ def readings_collection(request):
         return JsonResponse({'error': error}, status=400)
 
     setting, _ = AppMode.objects.get_or_create(id=1)
-    
-    try:
-        analysis = analyze_reading_with_llm(
-            soil_level=reading_data['soil_level'],
-            ambient_light_level=reading_data['ambient_light_level'],
-            humidity_levels=reading_data['humidity_levels'],
-            temperature_levels=reading_data['temperature_levels'],
-            device_id=reading_data['device_id'],
-            mode=setting.mode,
-        )
-    except PlantAnalysisError as error:
-        return JsonResponse({'error': str(error)}, status=502)
 
     reading = PlantReading.objects.create(
         **reading_data,
-        condition=analysis['condition'],
-        plant_messages=analysis['messages'],
+        analysis_mode=setting.mode,
+        analysis_status=PlantReading.ANALYSIS_PENDING,
+        condition=None,
+        plant_messages=[],
     )
-    return JsonResponse(_serialize_reading(reading), status=201)
+    queued_now = enqueue_reading_analysis(reading.id)
+    schedule_pending_analyses(limit=2)
+
+    response_payload = _serialize_reading(reading)
+    response_payload['analysisQueued'] = bool(queued_now)
+    return JsonResponse(response_payload, status=202)
 
 
 @require_http_methods(['GET'])
 def plant_status(request):
+    schedule_pending_analyses(limit=2)
     device_id = request.GET.get('deviceId')
     reading = _get_latest_analyzed_reading(device_id)
     if reading is None:
@@ -162,6 +168,7 @@ def plant_status(request):
 
 @require_http_methods(['GET'])
 def plant_voice(request):
+    schedule_pending_analyses(limit=2)
     device_id = request.GET.get('deviceId')
     reading = _get_latest_analyzed_reading(device_id)
     if reading is None:

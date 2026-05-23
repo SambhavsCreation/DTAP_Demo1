@@ -61,6 +61,7 @@ class PlantReadingApiTests(TestCase):
         PlantReading.objects.create(
             soil_level=44,
             ambient_light_level=680,
+            analysis_status=PlantReading.ANALYSIS_COMPLETED,
             condition='neutral',
             plant_messages=['I feel okay.'] * 5,
         )
@@ -72,19 +73,9 @@ class PlantReadingApiTests(TestCase):
         self.assertEqual(len(payload['items']), 1)
         self.assertEqual(payload['latest']['soilLevel'], 44)
 
-    @patch('readings.views.analyze_reading_with_llm')
-    def test_post_reading_creates_record(self, analyze_mock):
-        analyze_mock.return_value = {
-            'condition': 'good',
-            'messages': [
-                'I am thriving.',
-                'My leaves feel bright.',
-                'I am well watered.',
-                'The sunlight feels perfect.',
-                'I am in great shape.',
-            ],
-        }
-
+    @patch('readings.views.schedule_pending_analyses', return_value=0)
+    @patch('readings.views.enqueue_reading_analysis', return_value=1)
+    def test_post_reading_creates_record(self, _enqueue_mock, _schedule_mock):
         response = self.client.post(
             reverse('readings_collection'),
             data=json.dumps(
@@ -99,10 +90,14 @@ class PlantReadingApiTests(TestCase):
             content_type='application/json',
         )
 
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.status_code, 202)
         self.assertEqual(PlantReading.objects.count(), 1)
-        self.assertEqual(PlantReading.objects.first().soil_level, 61)
-        self.assertEqual(PlantReading.objects.first().condition, 'good')
+        created = PlantReading.objects.first()
+        self.assertEqual(created.soil_level, 61)
+        self.assertEqual(created.analysis_status, PlantReading.ANALYSIS_PENDING)
+        self.assertEqual(created.analysis_mode, 'sfw')
+        self.assertIsNone(created.condition)
+        self.assertEqual(created.plant_messages, [])
 
     def test_post_reading_rejects_invalid_soil_level(self):
         response = self.client.post(
@@ -121,19 +116,9 @@ class PlantReadingApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
 
-    @patch('readings.views.analyze_reading_with_llm')
-    def test_post_reading_accepts_raw_esp32_soil_value(self, analyze_mock):
-        analyze_mock.return_value = {
-            'condition': 'neutral',
-            'messages': [
-                'I am holding steady.',
-                'My roots are okay.',
-                'Light is manageable.',
-                'A bit more care helps.',
-                'I am not doing too bad.',
-            ],
-        }
-
+    @patch('readings.views.schedule_pending_analyses', return_value=0)
+    @patch('readings.views.enqueue_reading_analysis', return_value=1)
+    def test_post_reading_accepts_raw_esp32_soil_value(self, _enqueue_mock, _schedule_mock):
         response = self.client.post(
             reverse('readings_collection'),
             data=json.dumps(
@@ -148,15 +133,17 @@ class PlantReadingApiTests(TestCase):
             content_type='application/json',
         )
 
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.status_code, 202)
         self.assertEqual(PlantReading.objects.count(), 1)
         self.assertEqual(PlantReading.objects.first().soil_level, 3120)
+        self.assertEqual(PlantReading.objects.first().analysis_status, PlantReading.ANALYSIS_PENDING)
 
     @patch('readings.views.random.choice', return_value='I need a little more water.')
     def test_plant_status_returns_condition_and_message(self, _choice_mock):
         PlantReading.objects.create(
             soil_level=38,
             ambient_light_level=240,
+            analysis_status=PlantReading.ANALYSIS_COMPLETED,
             condition='bad',
             plant_messages=[
                 'I need a little more water.',
@@ -180,6 +167,7 @@ class PlantReadingApiTests(TestCase):
         PlantReading.objects.create(
             soil_level=71,
             ambient_light_level=530,
+            analysis_status=PlantReading.ANALYSIS_COMPLETED,
             condition='good',
             plant_messages=[
                 'I feel great today.',
@@ -204,6 +192,7 @@ class PlantReadingApiTests(TestCase):
         PlantReading.objects.create(
             soil_level=71,
             ambient_light_level=530,
+            analysis_status=PlantReading.ANALYSIS_COMPLETED,
             condition='good',
             plant_messages=[
                 'Line 1\r\nLine 2',

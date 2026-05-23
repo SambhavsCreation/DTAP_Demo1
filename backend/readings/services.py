@@ -2,12 +2,17 @@ import base64
 import binascii
 import io
 import json
+import logging
 import ssl
+import threading
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 
 import certifi
 from django.conf import settings
+from django.db import close_old_connections, connections
+from django.utils import timezone
 from gtts import gTTS
 
 
@@ -17,6 +22,152 @@ class PlantAnalysisError(Exception):
 
 class PlantTtsError(Exception):
     pass
+
+
+logger = logging.getLogger(__name__)
+
+_analysis_executor = None
+_analysis_executor_lock = threading.Lock()
+_analysis_scheduled_ids = set()
+_analysis_scheduled_lock = threading.Lock()
+
+
+def _get_analysis_executor():
+    global _analysis_executor
+    if _analysis_executor is not None:
+        return _analysis_executor
+
+    with _analysis_executor_lock:
+        if _analysis_executor is None:
+            workers = max(1, int(getattr(settings, 'OPENROUTER_ANALYSIS_WORKERS', 1)))
+            _analysis_executor = ThreadPoolExecutor(
+                max_workers=workers,
+                thread_name_prefix='plant-analysis',
+            )
+    return _analysis_executor
+
+
+def _get_analysis_queue_limit():
+    workers = max(1, int(getattr(settings, 'OPENROUTER_ANALYSIS_WORKERS', 1)))
+    queue_limit = max(workers, int(getattr(settings, 'OPENROUTER_ANALYSIS_QUEUE_LIMIT', 24)))
+    return queue_limit
+
+
+def _reserve_queue_slot(reading_id):
+    queue_limit = _get_analysis_queue_limit()
+    with _analysis_scheduled_lock:
+        if reading_id in _analysis_scheduled_ids:
+            return False
+        if len(_analysis_scheduled_ids) >= queue_limit:
+            return False
+        _analysis_scheduled_ids.add(reading_id)
+        return True
+
+
+def _release_queue_slot(reading_id):
+    with _analysis_scheduled_lock:
+        _analysis_scheduled_ids.discard(reading_id)
+
+
+def _run_analysis_for_reading(reading_id):
+    from .models import PlantReading
+
+    close_old_connections()
+    try:
+        claimed = PlantReading.objects.filter(
+            id=reading_id,
+            analysis_status=PlantReading.ANALYSIS_PENDING,
+        ).update(
+            analysis_status=PlantReading.ANALYSIS_PROCESSING,
+            analysis_started_at=timezone.now(),
+            analysis_error='',
+        )
+        if not claimed:
+            return
+
+        reading = PlantReading.objects.get(id=reading_id)
+        analysis = analyze_reading_with_llm(
+            soil_level=reading.soil_level,
+            ambient_light_level=reading.ambient_light_level,
+            humidity_levels=reading.humidity_levels,
+            temperature_levels=reading.temperature_levels,
+            device_id=reading.device_id,
+            mode=reading.analysis_mode,
+        )
+
+        PlantReading.objects.filter(id=reading_id).update(
+            analysis_status=PlantReading.ANALYSIS_COMPLETED,
+            analysis_completed_at=timezone.now(),
+            analysis_error='',
+            condition=analysis['condition'],
+            plant_messages=analysis['messages'],
+        )
+    except PlantAnalysisError as error:
+        PlantReading.objects.filter(id=reading_id).update(
+            analysis_status=PlantReading.ANALYSIS_FAILED,
+            analysis_completed_at=timezone.now(),
+            analysis_error=str(error),
+        )
+    except Exception as error:
+        logger.exception('Unexpected failure while analyzing reading %s', reading_id)
+        PlantReading.objects.filter(id=reading_id).update(
+            analysis_status=PlantReading.ANALYSIS_FAILED,
+            analysis_completed_at=timezone.now(),
+            analysis_error=f'Unexpected analysis failure: {error}',
+        )
+    finally:
+        _release_queue_slot(reading_id)
+        try:
+            schedule_pending_analyses(limit=1)
+        except Exception:
+            logger.exception('Failed to schedule follow-up pending analysis tasks.')
+        close_old_connections()
+        connections.close_all()
+
+
+def _submit_analysis_task(reading_id):
+    if not _reserve_queue_slot(reading_id):
+        return False
+    _get_analysis_executor().submit(_run_analysis_for_reading, reading_id)
+    return True
+
+
+def enqueue_reading_analysis(reading_id):
+    if not settings.OPENROUTER_API_KEY:
+        return 0
+
+    reading_id = int(reading_id)
+    return 1 if _submit_analysis_task(reading_id) else 0
+
+
+def schedule_pending_analyses(limit=None):
+    if not settings.OPENROUTER_API_KEY:
+        return 0
+
+    from .models import PlantReading
+
+    queue_limit = _get_analysis_queue_limit()
+    with _analysis_scheduled_lock:
+        available_slots = max(0, queue_limit - len(_analysis_scheduled_ids))
+
+    if available_slots <= 0:
+        return 0
+
+    if limit is None:
+        query_limit = available_slots
+    else:
+        query_limit = max(1, min(int(limit), available_slots))
+
+    pending_ids = list(
+        PlantReading.objects.filter(analysis_status=PlantReading.ANALYSIS_PENDING)
+        .order_by('recorded_at')
+        .values_list('id', flat=True)[:query_limit]
+    )
+
+    scheduled = 0
+    for reading_id in pending_ids:
+        scheduled += 1 if _submit_analysis_task(reading_id) else 0
+    return scheduled
 
 
 def _build_openrouter_ssl_context():
@@ -128,7 +279,11 @@ Return only valid JSON in this exact shape:
 
     try:
         ssl_context = _build_openrouter_ssl_context()
-        with urllib.request.urlopen(request, timeout=45, context=ssl_context) as response:
+        with urllib.request.urlopen(
+            request,
+            timeout=settings.OPENROUTER_REQUEST_TIMEOUT_SECONDS,
+            context=ssl_context,
+        ) as response:
             payload = json.loads(response.read().decode('utf-8'))
     except urllib.error.HTTPError as error:
         details = error.read().decode('utf-8', errors='ignore')

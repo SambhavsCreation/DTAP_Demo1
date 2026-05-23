@@ -19,6 +19,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = BASE_DIR.parent
 
 
+def get_env_int(name, default):
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    try:
+        return int(raw_value)
+    except ValueError:
+        return default
+
+
 def load_env_file(path):
     if not path.exists():
         return
@@ -168,6 +178,12 @@ if 'DYNO' in os.environ:
 OPENROUTER_API_KEY = os.environ.get('OPENROUTER_KEY', '')
 OPENROUTER_MODEL = os.environ.get('OPENROUTER_MODEL', 'deepseek/deepseek-v4-flash')
 OPENROUTER_PROVIDER_SORT = os.environ.get('OPENROUTER_PROVIDER_SORT', 'throughput')
+OPENROUTER_REQUEST_TIMEOUT_SECONDS = max(5, get_env_int('OPENROUTER_REQUEST_TIMEOUT_SECONDS', 45))
+OPENROUTER_ANALYSIS_WORKERS = max(1, get_env_int('OPENROUTER_ANALYSIS_WORKERS', 1))
+OPENROUTER_ANALYSIS_QUEUE_LIMIT = max(
+    OPENROUTER_ANALYSIS_WORKERS,
+    get_env_int('OPENROUTER_ANALYSIS_QUEUE_LIMIT', 24),
+)
 OPENROUTER_CA_BUNDLE = os.environ.get('OPENROUTER_CA_BUNDLE', '')
 PLANT_TTS_LANGUAGE = os.environ.get('PLANT_TTS_LANGUAGE', 'en')
 GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY', '')
