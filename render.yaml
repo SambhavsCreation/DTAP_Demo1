@@ -11,7 +11,9 @@ services:
       - key: OPENROUTER_KEY
         sync: false
       - key: OPENROUTER_MODEL
-        value: deepseek/deepseek-v3.2
+        value: deepseek/deepseek-v4-flash
+      - key: OPENROUTER_PROVIDER_SORT
+        value: throughput
       - key: PLANT_TTS_LANGUAGE
         value: en
       - key: DEBUG

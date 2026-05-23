@@ -166,7 +166,8 @@ if 'DYNO' in os.environ:
     CORS_ALLOWED_ORIGINS.append('https://planty-patootie.herokuapp.com')
 
 OPENROUTER_API_KEY = os.environ.get('OPENROUTER_KEY', '')
-OPENROUTER_MODEL = os.environ.get('OPENROUTER_MODEL', 'deepseek/deepseek-v3.2')
+OPENROUTER_MODEL = os.environ.get('OPENROUTER_MODEL', 'deepseek/deepseek-v4-flash')
+OPENROUTER_PROVIDER_SORT = os.environ.get('OPENROUTER_PROVIDER_SORT', 'throughput')
 OPENROUTER_CA_BUNDLE = os.environ.get('OPENROUTER_CA_BUNDLE', '')
 PLANT_TTS_LANGUAGE = os.environ.get('PLANT_TTS_LANGUAGE', 'en')
 GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY', '')

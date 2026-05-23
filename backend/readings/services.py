@@ -110,6 +110,9 @@ Return only valid JSON in this exact shape:
                 {'role': 'user', 'content': prompt},
             ],
             'temperature': 0.7,
+            'provider': {
+                'sort': settings.OPENROUTER_PROVIDER_SORT,
+            },
         }
     ).encode('utf-8')
 
