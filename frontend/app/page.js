@@ -46,12 +46,23 @@ function fmtDate(iso) {
 function getHealthIndex(r) {
   if (!r) return null;
   let score = 100;
-  if (r.condition === 'bad') score -= 40;
-  if (r.condition === 'neutral') score -= 15;
+  
+  // Soil penalty (optimal: 20-80%)
   const soilPct = (r.soilLevel / 4095) * 100;
-  const soilDiff = Math.abs(50 - soilPct);
-  if (soilDiff > 30) score -= 15;
-  if (r.temperatureLevels < 15 || r.temperatureLevels > 30) score -= 10;
+  if (soilPct < 20) score -= (20 - soilPct) * 1.5;
+  else if (soilPct > 80) score -= (soilPct - 80) * 1.5;
+
+  // Temperature penalty (optimal: 15-32°C)
+  if (r.temperatureLevels < 15) score -= (15 - r.temperatureLevels) * 2;
+  else if (r.temperatureLevels > 32) score -= (r.temperatureLevels - 32) * 2;
+
+  // Humidity penalty (optimal: 25-85%)
+  if (r.humidityLevels < 25) score -= (25 - r.humidityLevels) * 0.5;
+  else if (r.humidityLevels > 85) score -= (r.humidityLevels - 85) * 0.5;
+
+  // Light penalty (optimal: >50 lux)
+  if (r.ambientLightLevel < 50) score -= (50 - r.ambientLightLevel) * 0.2;
+
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
