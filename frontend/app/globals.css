@@ -20,6 +20,7 @@
   --soil: #3b82f6;
   --light: #f59e0b;
   --hum: #8b5cf6;
+  --temp: #ef4444;
 
   /* Default theme (no data / good fallback) */
   --theme-main: #15803d;
@@ -489,6 +490,7 @@ button, input { font: inherit; }
 .s-soil { background: var(--soil); }
 .s-light { background: var(--light); }
 .s-hum { background: var(--hum); }
+.s-temp { background: var(--temp); }
 
 .chart-wrap { overflow-x: auto; }
 
@@ -515,11 +517,13 @@ button, input { font: inherit; }
 .soil-l { stroke: var(--soil); }
 .light-l { stroke: var(--light); }
 .hum-l { stroke: var(--hum); }
+.temp-l { stroke: var(--temp); }
 
 .dot { stroke: #fff; stroke-width: 2; }
 .d-soil { fill: var(--soil); }
 .d-light { fill: var(--light); }
 .d-hum { fill: var(--hum); }
+.d-temp { fill: var(--temp); }
 
 .axis-label {
   fill: var(--muted);

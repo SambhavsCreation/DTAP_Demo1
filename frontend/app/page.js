@@ -9,7 +9,7 @@ const CHART_H = 260;
 const CHART_PAD = 36;
 
 const EMPTY_FORM = {
-  soilLevel: '50',
+  soilLevel: '2048',
   ambientLightLevel: '400',
   humidityLevels: '40',
   temperatureLevels: '22',
@@ -48,10 +48,15 @@ function getHealthIndex(r) {
   let score = 100;
   if (r.condition === 'bad') score -= 40;
   if (r.condition === 'neutral') score -= 15;
-  const soilDiff = Math.abs(50 - r.soilLevel);
+  const soilPct = (r.soilLevel / 4095) * 100;
+  const soilDiff = Math.abs(50 - soilPct);
   if (soilDiff > 30) score -= 15;
   if (r.temperatureLevels < 15 || r.temperatureLevels > 30) score -= 10;
   return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function formatSoil(raw) {
+  return ((raw / 4095) * 100).toFixed(1);
 }
 
 export default function HomePage() {
@@ -239,11 +244,13 @@ export default function HomePage() {
 
   const chartPts = [...readings].reverse();
   const lightMax = Math.max(100, ...chartPts.map((r) => Math.ceil(r.ambientLightLevel / 100) * 100));
+  const tempMax = Math.max(40, ...chartPts.map((r) => Math.ceil(r.temperatureLevels / 10) * 10));
   const pw = CHART_W - CHART_PAD * 2;
   const ph = CHART_H - CHART_PAD * 2;
-  const soilD = linePath(chartPts, pw, ph, (r) => r.soilLevel, 100);
+  const soilD = linePath(chartPts, pw, ph, (r) => (r.soilLevel / 4095) * 100, 100);
   const lightD = linePath(chartPts, pw, ph, (r) => r.ambientLightLevel, lightMax);
   const humD = linePath(chartPts, pw, ph, (r) => r.humidityLevels, 100);
+  const tempD = linePath(chartPts, pw, ph, (r) => r.temperatureLevels, tempMax);
 
   return (
     <div className={`app ${themeClass}`}>
@@ -282,7 +289,7 @@ export default function HomePage() {
                 <div className="metrics-grid">
                   <div className="metric">
                     <span className="metric-label">Soil</span>
-                    <span className="metric-value">{latest.soilLevel}%</span>
+                    <span className="metric-value">{formatSoil(latest.soilLevel)}%</span>
                   </div>
                   <div className="metric">
                     <span className="metric-label">Light</span>
@@ -306,9 +313,9 @@ export default function HomePage() {
                 <ActivityIcon /> Add Reading
               </h2>
               <div className="field">
-                <label htmlFor="soilLevel">Soil Moisture (%)</label>
-                <input id="soilLevel" name="soilLevel" type="range" min="0" max="100" value={form.soilLevel} onChange={onChange} />
-                <span className="field-value">{form.soilLevel}%</span>
+                <label htmlFor="soilLevel">Soil Moisture (Raw ADC 0-4095)</label>
+                <input id="soilLevel" name="soilLevel" type="range" min="0" max="4095" value={form.soilLevel} onChange={onChange} />
+                <span className="field-value">{formatSoil(form.soilLevel)}%</span>
               </div>
               <div className="field">
                 <label htmlFor="ambientLightLevel">Ambient Light (lux)</label>
@@ -364,6 +371,7 @@ export default function HomePage() {
                     <span className="leg"><span className="swatch s-soil" /> Soil</span>
                     <span className="leg"><span className="swatch s-light" /> Light</span>
                     <span className="leg"><span className="swatch s-hum" /> Humidity</span>
+                    <span className="leg"><span className="swatch s-temp" /> Temperature</span>
                   </div>
                   <div className="chart-wrap">
                     <svg className="chart" viewBox={`0 0 ${CHART_W} ${CHART_H}`} role="img" aria-label="Sensor trend chart">
@@ -375,13 +383,15 @@ export default function HomePage() {
                         {soilD && <path d={soilD} className="line soil-l" />}
                         {lightD && <path d={lightD} className="line light-l" />}
                         {humD && <path d={humD} className="line hum-l" />}
+                        {tempD && <path d={tempD} className="line temp-l" />}
                         {chartPts.map((r, i) => {
                           const x = chartPts.length > 1 ? (i * pw) / (chartPts.length - 1) : pw / 2;
                           return (
                             <g key={r.id}>
-                              <circle cx={x} cy={ph - (r.soilLevel / 100) * ph} r="3.5" className="dot d-soil" />
+                              <circle cx={x} cy={ph - ((r.soilLevel / 4095) * 100) / 100 * ph} r="3.5" className="dot d-soil" />
                               <circle cx={x} cy={ph - (r.ambientLightLevel / lightMax) * ph} r="3.5" className="dot d-light" />
                               <circle cx={x} cy={ph - (r.humidityLevels / 100) * ph} r="3.5" className="dot d-hum" />
+                              <circle cx={x} cy={ph - (r.temperatureLevels / tempMax) * ph} r="3.5" className="dot d-temp" />
                               <text x={x} y={ph + 18} textAnchor="middle" className="axis-label">{fmtTime(r.recordedAt)}</text>
                             </g>
                           );
