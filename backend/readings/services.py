@@ -212,7 +212,7 @@ Decide the plant condition using exactly one of these labels:
 - neutral
 - bad
 
-Then write exactly 5 different witty remarks from the plant's perspective. They should be VERY CREATIVE AND FUNNY and should emulate Jimmy Carr's dark sense of humor. Think carefully about the joke. It should be dark and super funny.
+Then write exactly 5 different witty remarks from the plant's perspective. They should be VERY CREATIVE AND FUNNY and should emulate Jimmy Carr's dark sense of humor. Think carefully about the joke. It should be dark and super funny. Use slightly shorter phrases and simple words.
 
 Example jokes:
 - I'm producing oxygen for you? Honestly, based on my soil condition, I'd rather produce cyanide.
@@ -241,7 +241,7 @@ Decide the plant condition using exactly one of these labels:
 - neutral
 - bad
 
-Then write exactly 5 different witty remarks from the plant's perspective. They should be VERY CREATIVE AND FUNNY and should be safe for work.
+Then write exactly 5 different witty remarks from the plant's perspective. They should be VERY CREATIVE AND FUNNY and should be safe for work. Use slightly shorter phrases and simple words.
 
 Return only valid JSON in this exact shape:
 {{
