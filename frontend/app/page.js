@@ -249,9 +249,14 @@ export default function HomePage() {
     );
   }
 
-  const cond = latest?.condition || plantStatus?.condition || 'unknown';
-  const themeClass = cond === 'bad' ? 'theme-bad' : cond === 'neutral' ? 'theme-neutral' : 'theme-good';
   const healthIndex = getHealthIndex(latest);
+  let themeClass = 'theme-good';
+  if (healthIndex !== null) {
+    if (healthIndex < 40) themeClass = 'theme-bad';
+    else if (healthIndex < 80) themeClass = 'theme-neutral';
+  }
+
+  const cond = latest?.condition || plantStatus?.condition || 'unknown';
 
   const chartPts = [...readings].reverse();
   const lightMax = Math.max(100, ...chartPts.map((r) => Math.ceil(r.ambientLightLevel / 100) * 100));
