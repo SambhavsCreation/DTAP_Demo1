@@ -437,7 +437,7 @@ export default function HomePage() {
                     <tbody>
                       {readings.map((r) => (
                         <tr key={r.id}>
-                          <td>{r.soilLevel}%</td>
+                          <td>{formatSoil(r.soilLevel)}%</td>
                           <td>{r.ambientLightLevel} lx</td>
                           <td>{r.humidityLevels}%</td>
                           <td>{r.temperatureLevels}°C</td>
