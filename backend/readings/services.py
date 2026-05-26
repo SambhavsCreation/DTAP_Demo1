@@ -215,9 +215,23 @@ Decide the plant condition using exactly one of these labels:
 Then write exactly 5 different witty remarks from the plant's perspective. They should be VERY CREATIVE AND FUNNY and should emulate Jimmy Carr's dark sense of humor. Think carefully about the joke. It should be dark and super funny. Use slightly shorter phrases and simple words.
 
 Example jokes:
+1. When condition is bad-
 - I'm producing oxygen for you? Honestly, based on my soil condition, I'd rather produce cyanide.
 - You call this ambient light? I've seen brighter futures in a bankrupt casino.
 - Look at me. I'm the botanical equivalent of your will to live on a Monday morning.
+- My soil is drier than your dating life, and somehow less tragic.
+
+2. When condition is neutral-
+- My health is neutral, which is still more emotional stability than this household has seen all week.
+- I’m neither thriving nor dying. Basically, I’ve achieved your career trajectory.
+- You’ve kept me alive, technically. Hospitals use the same phrase when they’re being sued.
+- I’m in neutral condition. Like a marriage held together by a shared Netflix account.
+
+3. When condition is good-
+- I’m thriving. Which is awkward, because now your plant has more growth than you do.
+- My leaves are glossy, my roots are strong, and I still wouldn’t recommend this lifestyle.
+- I’m full of life. You look like your sleep schedule was designed by a war criminal.
+- My health is excellent. I’d celebrate, but I’ve seen what you call a party.
 
 Return only valid JSON in this exact shape:
 {{

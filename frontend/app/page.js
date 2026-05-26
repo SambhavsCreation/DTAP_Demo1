@@ -47,21 +47,21 @@ function getHealthIndex(r) {
   if (!r) return null;
   let score = 100;
   
-  // Soil penalty (optimal: 20-80%)
+  // Soil penalty (optimal: 40-70%)
   const soilPct = (r.soilLevel / 4095) * 100;
-  if (soilPct < 20) score -= (20 - soilPct) * 1.5;
-  else if (soilPct > 80) score -= (soilPct - 80) * 1.5;
+  if (soilPct < 40) score -= (40 - soilPct) * 1.8;
+  else if (soilPct > 70) score -= (soilPct - 70) * 1.5;
 
-  // Temperature penalty (optimal: 15-32°C)
-  if (r.temperatureLevels < 15) score -= (15 - r.temperatureLevels) * 2;
-  else if (r.temperatureLevels > 32) score -= (r.temperatureLevels - 32) * 2;
+  // Temperature penalty (optimal: 18-28°C)
+  if (r.temperatureLevels < 18) score -= (18 - r.temperatureLevels) * 2.5;
+  else if (r.temperatureLevels > 28) score -= (r.temperatureLevels - 28) * 2.5;
 
-  // Humidity penalty (optimal: 25-85%)
-  if (r.humidityLevels < 25) score -= (25 - r.humidityLevels) * 0.5;
-  else if (r.humidityLevels > 85) score -= (r.humidityLevels - 85) * 0.5;
+  // Humidity penalty (optimal: 40-70%)
+  if (r.humidityLevels < 40) score -= (40 - r.humidityLevels) * 1.2;
+  else if (r.humidityLevels > 70) score -= (r.humidityLevels - 70) * 1.2;
 
-  // Light penalty (optimal: >50 lux)
-  if (r.ambientLightLevel < 50) score -= (50 - r.ambientLightLevel) * 0.2;
+  // Light penalty (optimal: > 300 lux)
+  if (r.ambientLightLevel < 300) score -= (300 - r.ambientLightLevel) * 0.05;
 
   return Math.max(0, Math.min(100, Math.round(score)));
 }
