@@ -45,6 +45,8 @@ function fmtDate(iso) {
 
 function getHealthIndex(r) {
   if (!r) return null;
+  if (typeof r.healthIndex === 'number') return r.healthIndex;
+
   let score = 100;
   
   // Soil penalty (optimal: 40-70%)
@@ -64,6 +66,13 @@ function getHealthIndex(r) {
   if (r.ambientLightLevel < 300) score -= (300 - r.ambientLightLevel) * 0.05;
 
   return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function getConditionFromHealthIndex(healthIndex) {
+  if (healthIndex === null || healthIndex === undefined) return 'unknown';
+  if (healthIndex < 40) return 'bad';
+  if (healthIndex < 80) return 'neutral';
+  return 'good';
 }
 
 function formatSoil(raw) {
@@ -250,13 +259,9 @@ export default function HomePage() {
   }
 
   const healthIndex = getHealthIndex(latest);
-  let themeClass = 'theme-good';
-  if (healthIndex !== null) {
-    if (healthIndex < 40) themeClass = 'theme-bad';
-    else if (healthIndex < 80) themeClass = 'theme-neutral';
-  }
-
-  const cond = latest?.condition || plantStatus?.condition || 'unknown';
+  const statusHealthIndex = getHealthIndex(plantStatus?.reading);
+  const cond = getConditionFromHealthIndex(healthIndex ?? statusHealthIndex);
+  const themeClass = cond === 'bad' ? 'theme-bad' : cond === 'neutral' ? 'theme-neutral' : 'theme-good';
 
   const chartPts = [...readings].reverse();
   const lightMax = Math.max(100, ...chartPts.map((r) => Math.ceil(r.ambientLightLevel / 100) * 100));
